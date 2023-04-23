@@ -31,7 +31,7 @@ struct HomeView: View {
                     
                     LazyVGrid(columns: layout) {
                         
-                        ForEach(bodyOptionsList.categories.keys.sorted(), id: \.self) { key in
+                        ForEach(bodyOptionsList.categories.keys.sorted(by : >), id: \.self) { key in
                             
                             NavigationLink{
                                 GiveUltrasoundView(name: key)
