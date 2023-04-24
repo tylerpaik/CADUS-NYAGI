@@ -6,4 +6,4 @@ val: training/data/images/valid/
 nc: 4
 
 # class names
-names: ['a','b','c','d']
+names: ['Skin/Fat','Deltoid','Tendon','Humerus']
