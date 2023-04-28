@@ -1,7 +1,7 @@
 import SwiftUI
 import CoreML
 import Vision
-
+import AVFoundation
 
 
 struct analyzeButton: View {
@@ -17,11 +17,22 @@ struct analyzeButton: View {
             }
             
             Button(action: {
-                processImage(photo) { result in
-                    analysisResults = result
-                    showResultsView = true
-                }
-            }) {
+                            if let photo = photo {
+                                processImage(photo) { result in
+                                    analysisResults = result
+                                    showResultsView = true
+                                }
+                            } else if let videoURL = videoURL {
+                                DispatchQueue.global(qos: .userInitiated).async {
+                                    processVideo(url: videoURL) { result in
+                                        DispatchQueue.main.async {
+                                            analysisResults = result
+                                            showResultsView = true
+                                        }
+                                    }
+                                }
+                            }
+                        }) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10)
                         .fill(Color(red: 0.95, green: 0.95, blue: 0.95))
@@ -203,6 +214,57 @@ func processImage(_ inputImage: UIImage?, completion: @escaping (UIImage?) -> Vo
     
     let handler = VNImageRequestHandler(cgImage: resizedImage.cgImage!, options: [:])
     try? handler.perform([request])
+}
+func processVideo(url: URL, completion: @escaping (UIImage?) -> Void) {
+    let asset = AVAsset(url: url)
+    let assetReader: AVAssetReader
+    do {
+        assetReader = try AVAssetReader(asset: asset)
+    } catch {
+        print("Error creating asset reader: \(error)")
+        completion(nil)
+        return
+    }
+
+    let track = asset.tracks(withMediaType: .video).first!
+    let outputSettings: [String: Any] = [
+        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+        kCVPixelBufferWidthKey as String: track.naturalSize.width,
+        kCVPixelBufferHeightKey as String: track.naturalSize.height
+    ]
+
+    let readerOutput = AVAssetReaderTrackOutput(track: track, outputSettings: outputSettings)
+    assetReader.add(readerOutput)
+
+    assetReader.startReading()
+
+    while let sampleBuffer = readerOutput.copyNextSampleBuffer() {
+        guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            continue
+        }
+
+        let ciImage = CIImage(cvImageBuffer: imageBuffer)
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
+            continue
+        }
+
+        let frame = UIImage(cgImage: cgImage)
+        
+        // Resize the frame before processing
+        let modelInputSize = CGSize(width: 192, height: 320)
+        let resizedFrame = resizeImage(frame, newSize: modelInputSize)
+
+        processImage(resizedFrame) { result in
+            DispatchQueue.main.async {
+                completion(result)
+            }
+        }
+
+        if assetReader.status == .completed {
+            break
+        }
+    }
 }
 
 
